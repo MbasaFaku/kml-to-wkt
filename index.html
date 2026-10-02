@@ -1,0 +1,492 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>KML to WKT converter | YUMBI</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:wght@400;600;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{
+  --bg:#ffffff; --band:#F7F7F7; --surface:#ffffff; --line:#ECECEC;
+  --ink:#282828; --body:#6C6C6C; --muted:#8a8a8a;
+  --red:#D72E21; --red-wash:#FDF3F2;
+  --blue:#33A9C3; --blue-text:#17798F; --blue-wash:#E5F4F7;
+  --amber-wash:#FFF6E5; --amber-text:#9A6100;
+  --green-wash:#EFF7EA; --green-text:#3F7420;
+  --code-bg:#F7F7F7; --shadow:0 3px 15px rgba(0,0,0,.08);
+  box-sizing:border-box;
+  padding-top:env(safe-area-inset-top,0px);
+  padding-bottom:env(safe-area-inset-bottom,0px);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#151416; --band:#1d1c1f; --surface:#1f1e21; --line:#2e2d31;
+    --ink:#f2f2f2; --body:#c2c2c2; --muted:#9a9a9a;
+    --red-wash:#3a1d1b; --blue-wash:#16323a; --blue-text:#7fd0e2;
+    --amber-wash:#3a2e14; --amber-text:#f3c46b;
+    --green-wash:#1f3216; --green-text:#a9db88;
+    --code-bg:#19181b; --shadow:0 3px 15px rgba(0,0,0,.4);
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#151416; --band:#1d1c1f; --surface:#1f1e21; --line:#2e2d31;
+  --ink:#f2f2f2; --body:#c2c2c2; --muted:#9a9a9a;
+  --red-wash:#3a1d1b; --blue-wash:#16323a; --blue-text:#7fd0e2;
+  --amber-wash:#3a2e14; --amber-text:#f3c46b;
+  --green-wash:#1f3216; --green-text:#a9db88;
+  --code-bg:#19181b; --shadow:0 3px 15px rgba(0,0,0,.4);
+}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*,*::before,*::after{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--body);font:16px/1.5 "Open Sans",system-ui,-apple-system,"Segoe UI",Roboto,Arial,sans-serif}
+h1,h2,h3{color:var(--ink);margin:0}
+.wrap{max-width:1240px;margin:0 auto;padding:28px 20px 48px}
+header{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;margin-bottom:22px}
+h1{font-size:clamp(26px,3.2vw,36px);line-height:1.25;font-weight:700}
+.byline{margin:2px 0 0;font-size:13px;color:var(--muted)}
+.lede{margin:6px 0 0;max-width:62ch}
+.layout{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:20px}
+@media (max-width:900px){.layout{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:20px;padding:20px;box-shadow:var(--shadow);min-width:0}
+.panel h2{font-size:18px;line-height:1.35;font-weight:700;margin-bottom:12px}
+.drop{border:2px dashed var(--line);border-radius:16px;padding:18px;text-align:center;background:var(--band);transition:border-color .15s,background .15s;cursor:pointer}
+.drop.over{border-color:var(--blue);background:var(--blue-wash)}
+.drop strong{color:var(--ink)}
+.drop small{display:block;font-size:13px;color:var(--muted);margin-top:2px}
+textarea{width:100%;font:13px/1.5 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;color:var(--ink);background:var(--code-bg);border:1px solid var(--line);border-radius:12px;padding:12px;resize:vertical}
+textarea:focus-visible,select:focus-visible,input:focus-visible,button:focus-visible{outline:3px solid var(--blue);outline-offset:2px}
+#kml{min-height:220px;margin-top:12px}
+.opts{display:grid;grid-template-columns:1fr 1fr;gap:12px 14px;margin-top:16px}
+@media (max-width:480px){.opts{grid-template-columns:1fr}}
+label.f{display:flex;flex-direction:column;gap:4px;font-size:13px;font-weight:600;color:var(--ink)}
+select,input[type=number]{font:14px "Open Sans",system-ui,sans-serif;color:var(--ink);background:var(--surface);border:1px solid #D1D1D1;border-radius:10px;padding:8px 10px}
+.check{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--ink)}
+.check input{width:18px;height:18px;accent-color:var(--red)}
+.row{display:flex;flex-wrap:wrap;gap:10px;align-items:center}
+.btn{font:700 14px/1 "Open Sans",system-ui,sans-serif;border-radius:999px;padding:0 20px;height:42px;cursor:pointer;border:1px solid transparent;white-space:nowrap}
+.btn-primary{background:var(--red);color:#fff;height:50px;padding:0 26px}
+.btn-primary:hover{filter:brightness(.94)}
+.btn-primary:disabled{opacity:.45;cursor:not-allowed}
+.btn-outline{background:transparent;border-color:var(--red);color:var(--red)}
+.btn-outline:hover{background:var(--red-wash)}
+.btn-ghost{background:transparent;border-color:#D1D1D1;color:var(--ink)}
+.btn-ghost:hover{background:var(--band)}
+.btn-sm{height:34px;padding:0 14px;font-size:13px}
+.preview{position:relative;background:var(--band);border-radius:16px;overflow:hidden;aspect-ratio:16/9;min-height:220px}
+.preview svg{width:100%;height:100%;display:block}
+.preview .empty{position:absolute;inset:0;display:grid;place-items:center;text-align:center;padding:20px;color:var(--muted);font-size:14px}
+.shape{fill:var(--blue);fill-opacity:.18;stroke:var(--blue-text);stroke-width:1.5;vector-effect:non-scaling-stroke;cursor:pointer;fill-rule:evenodd}
+.shape.line{fill:none}
+.shape.pt{fill:var(--blue-text);fill-opacity:1;stroke:#fff}
+.shape.active{fill:var(--red);stroke:var(--red);fill-opacity:.22}
+.shape.pt.active{fill:var(--red);fill-opacity:1}
+.summary{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 4px}
+.chip{font-size:13px;font-weight:600;border-radius:17px;padding:4px 12px;background:var(--blue-wash);color:var(--blue-text)}
+.chip.warn{background:var(--amber-wash);color:var(--amber-text)}
+.chip.ok{background:var(--green-wash);color:var(--green-text)}
+.chip.err{background:var(--red-wash);color:var(--red)}
+.results{display:flex;flex-direction:column;gap:12px;margin-top:14px}
+.card{border:1px solid var(--line);border-radius:16px;padding:14px;background:var(--surface);transition:border-color .15s}
+.card.active{border-color:var(--red)}
+.card-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:8px}
+.card h3{font-size:16px;line-height:1.35;font-weight:700;overflow-wrap:anywhere}
+.meta{font-size:13px;color:var(--muted)}
+.card textarea{min-height:84px;font-size:12px}
+.warns{margin:8px 0 0;padding:0;list-style:none;display:flex;flex-direction:column;gap:4px}
+.warns li{font-size:13px;border-radius:8px;padding:6px 10px;background:var(--amber-wash);color:var(--amber-text)}
+.warns li.bad{background:var(--red-wash);color:var(--red)}
+.error{margin-top:12px;border-radius:12px;padding:10px 12px;background:var(--red-wash);color:var(--red);font-size:14px}
+.toast{position:fixed;left:50%;bottom:calc(20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%) translateY(20px);opacity:0;background:var(--ink);color:var(--bg);font-weight:600;font-size:14px;padding:10px 18px;border-radius:999px;transition:.2s;pointer-events:none}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+footer{margin-top:28px;font-size:13px;color:var(--muted)}
+.hidden{display:none!important}
+@media (prefers-reduced-motion: reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div>
+      <h1>KML to WKT converter</h1>
+      <p class="byline">Created by Mbasa Faku</p>
+      <p class="lede">Drop a KML or KMZ export from Google Earth or My Maps and get Well-Known Text for each zone, in the exact format YUMBI delivery zones use.</p>
+    </div>
+    <div class="row">
+      <button class="btn btn-ghost" id="sampleBtn" type="button">Load sample</button>
+      <button class="btn btn-ghost" id="clearBtn" type="button">Clear</button>
+    </div>
+  </header>
+
+  <div class="layout">
+    <section class="panel" aria-labelledby="inTitle">
+      <h2 id="inTitle">KML input</h2>
+      <div class="drop" id="drop" tabindex="0" role="button" aria-label="Choose a KML or KMZ file">
+        <strong>Drop a .kml or .kmz file here</strong>
+        <small>or click to browse. You can also paste KML below.</small>
+        <input type="file" id="file" accept=".kml,.kmz,application/vnd.google-earth.kml+xml,application/vnd.google-earth.kmz" class="hidden">
+      </div>
+      <textarea id="kml" spellcheck="false" placeholder="&lt;kml xmlns=&quot;http://www.opengis.net/kml/2.2&quot;&gt;…"></textarea>
+
+      <div class="opts">
+        <label class="f">WKT style
+          <select id="style">
+            <option value="yumbi">YUMBI zone format: POLYGON((x y,x y))</option>
+            <option value="standard">Spaced: POLYGON ((x y, x y))</option>
+          </select>
+        </label>
+        <label class="f">Output
+          <select id="mode">
+            <option value="each">One WKT per placemark</option>
+            <option value="multi">Combine polygons into one MULTIPOLYGON</option>
+            <option value="collection">Combine everything into a GEOMETRYCOLLECTION</option>
+          </select>
+        </label>
+        <label class="f">Coordinate order
+          <select id="order">
+            <option value="lonlat">Longitude Latitude (WKT standard)</option>
+            <option value="latlon">Latitude Longitude</option>
+          </select>
+        </label>
+        <label class="f">Decimal places
+          <input type="number" id="prec" min="0" max="15" value="7">
+        </label>
+        <label class="f">Outer ring winding
+          <select id="wind">
+            <option value="keep">Keep as drawn</option>
+            <option value="ccw">Counter-clockwise (OGC / SQL Server geography)</option>
+            <option value="cw">Clockwise</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="close" checked> Close open rings</label>
+        <label class="check"><input type="checkbox" id="keepZ"> Keep altitude (Z)</label>
+      </div>
+      <div id="err" class="error hidden" role="alert"></div>
+    </section>
+
+    <section class="panel" aria-labelledby="outTitle">
+      <div class="card-head" style="margin-bottom:12px">
+        <h2 id="outTitle" style="margin:0">Preview and WKT</h2>
+        <button class="btn btn-primary" id="copyAll" type="button" disabled>Copy all WKT</button>
+      </div>
+      <div class="preview" id="preview">
+        <div class="empty" id="emptyMsg">Your shapes will appear here once a KML is loaded.</div>
+      </div>
+      <div class="summary" id="summary"></div>
+      <div class="results" id="results"></div>
+    </section>
+  </div>
+
+  <footer>Runs entirely in your browser. Files are never uploaded. © YUMBI 2026</footer>
+</div>
+<div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+<script>
+(function(){
+const $ = id => document.getElementById(id);
+const kmlEl=$('kml'), errEl=$('err'), resultsEl=$('results'), summaryEl=$('summary'), previewEl=$('preview'), copyAllBtn=$('copyAll');
+let current = [];   // [{name, geoms:[{type,rings|coords}], wkt, warnings}]
+let allWkt = '';
+
+/* ---------- file input ---------- */
+const drop=$('drop'), fileIn=$('file');
+drop.addEventListener('click',()=>fileIn.click());
+drop.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();fileIn.click();}});
+['dragenter','dragover'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(t=>drop.addEventListener(t,e=>{e.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',e=>{const f=e.dataTransfer.files&&e.dataTransfer.files[0]; if(f) readFile(f);});
+fileIn.addEventListener('change',()=>{if(fileIn.files[0]) readFile(fileIn.files[0]); fileIn.value='';});
+
+async function readFile(f){
+  try{
+    const isKmz = /\.kmz$/i.test(f.name) || f.type==='application/vnd.google-earth.kmz';
+    if(isKmz){
+      if(typeof JSZip==='undefined') throw new Error('KMZ support could not load. Unzip the KMZ and drop the doc.kml inside it instead.');
+      const zip = await JSZip.loadAsync(await f.arrayBuffer());
+      const names = Object.keys(zip.files).filter(n=>/\.kml$/i.test(n));
+      if(!names.length) throw new Error('This KMZ has no .kml file inside it.');
+      const pick = names.find(n=>/(^|\/)doc\.kml$/i.test(n)) || names[0];
+      kmlEl.value = await zip.file(pick).async('string');
+    } else {
+      kmlEl.value = await f.text();
+    }
+    run();
+  }catch(e){ showErr(e.message); }
+}
+
+/* ---------- KML parsing ---------- */
+const kids = (el,name) => Array.from(el.children).filter(c=>c.localName===name);
+const first = (el,name) => el.getElementsByTagNameNS('*',name)[0] || null;
+
+function parseCoords(txt){
+  if(!txt) return [];
+  return txt.trim().split(/\s+/).map(t=>t.split(',').map(Number)).filter(c=>c.length>=2 && isFinite(c[0]) && isFinite(c[1]));
+}
+function ringFrom(boundary){
+  const lr = first(boundary,'LinearRing'); const co = lr && first(lr,'coordinates');
+  return parseCoords(co && co.textContent);
+}
+function parseGeom(node, out){
+  switch(node.localName){
+    case 'Point': { const c=parseCoords((first(node,'coordinates')||{}).textContent); if(c.length) out.push({type:'Point',coords:c[0]}); break; }
+    case 'LineString': { const c=parseCoords((first(node,'coordinates')||{}).textContent); if(c.length) out.push({type:'LineString',coords:c}); break; }
+    case 'LinearRing': { const c=parseCoords((first(node,'coordinates')||{}).textContent); if(c.length) out.push({type:'Polygon',rings:[c]}); break; }
+    case 'Polygon': {
+      const outer = kids(node,'outerBoundaryIs')[0];
+      if(!outer) break;
+      const rings=[ringFrom(outer)];
+      kids(node,'innerBoundaryIs').forEach(b=>{const r=ringFrom(b); if(r.length) rings.push(r);});
+      if(rings[0].length) out.push({type:'Polygon',rings});
+      break;
+    }
+    case 'MultiGeometry': Array.from(node.children).forEach(c=>parseGeom(c,out)); break;
+  }
+}
+function parseKml(text){
+  const doc = new DOMParser().parseFromString(text,'application/xml');
+  if(doc.getElementsByTagName('parsererror').length) throw new Error('This isn\u2019t valid XML. Check the KML was copied in full, including the closing </kml> tag.');
+  const pms = Array.from(doc.getElementsByTagNameNS('*','Placemark'));
+  if(!pms.length) throw new Error('No placemarks found. KML shapes live inside <Placemark> elements; check you exported the layer, not just the map.');
+  const items=[];
+  pms.forEach((pm,i)=>{
+    const geoms=[];
+    Array.from(pm.children).forEach(c=>parseGeom(c,geoms));
+    if(!geoms.length) return;
+    const nm = kids(pm,'name')[0];
+    items.push({name:(nm&&nm.textContent.trim())||('Placemark '+(i+1)), geoms});
+  });
+  if(!items.length) throw new Error('Placemarks were found but none contain a Point, LineString or Polygon.');
+  return items;
+}
+
+/* ---------- geometry helpers ---------- */
+const same=(a,b)=>a[0]===b[0]&&a[1]===b[1];
+function signedArea(r){let s=0;for(let i=0;i<r.length-1;i++){s+=r[i][0]*r[i+1][1]-r[i+1][0]*r[i][1];}return s/2;}
+function segIntersect(p1,p2,p3,p4){
+  const d=(a,b,c)=>(c[0]-a[0])*(b[1]-a[1])-(b[0]-a[0])*(c[1]-a[1]);
+  const d1=d(p3,p4,p1),d2=d(p3,p4,p2),d3=d(p1,p2,p3),d4=d(p1,p2,p4);
+  return ((d1>0&&d2<0)||(d1<0&&d2>0))&&((d3>0&&d4<0)||(d3<0&&d4>0));
+}
+function selfIntersects(r){
+  const n=r.length-1; if(n>1500) return null; // too big to check quickly
+  for(let i=0;i<n;i++) for(let j=i+2;j<n;j++){
+    if(i===0&&j===n-1) continue;
+    if(segIntersect(r[i],r[i+1],r[j],r[j+1])) return true;
+  }
+  return false;
+}
+
+/* ---------- WKT building ---------- */
+function build(items, opt){
+  const f = n => { const v=Number(n.toFixed(opt.prec)); return Object.is(v,-0)?'0':String(v); };
+  const anyZ = opt.keepZ && items.some(it=>it.geoms.some(g=>(g.rings||[]).flat().concat(g.type==='Point'?[g.coords]:g.type==='LineString'?g.coords:[]).some(c=>c.length>2)));
+  const pt = c => { const xy = opt.order==='lonlat'?[c[0],c[1]]:[c[1],c[0]]; return xy.map(f).join(' ')+(anyZ?' '+f(c[2]||0):''); };
+  const compact = opt.style==='yumbi';
+  const S = compact ? ',' : ', ';            // separator between coordinates / rings
+  const zTag = anyZ ? ' Z' : '';
+  const G = compact ? '' : ' ';              // gap between keyword and opening bracket
+  const ringTxt = r => '('+r.map(pt).join(S)+')';
+  const polyBody = g => '('+g.rings.map(ringTxt).join(S)+')';
+  const geomWkt = g => g.type==='Point' ? `POINT${zTag}${G}(${pt(g.coords)})`
+                    : g.type==='LineString' ? `LINESTRING${zTag}${G}(${g.coords.map(pt).join(S)})`
+                    : `POLYGON${zTag}${G}${polyBody(g)}`;
+
+  let fixedCount=0, problemCount=0;
+  const out = items.map(it=>{
+    const warnings=[];
+    const geoms = it.geoms.map(g=>{
+      if(g.type!=='Polygon') {
+        const cs = g.type==='Point'?[g.coords]:g.coords;
+        if(cs.some(c=>Math.abs(c[1])>90||Math.abs(c[0])>180)) warnings.push({bad:true,t:'Coordinates fall outside valid longitude/latitude ranges.'});
+        return g;
+      }
+      const rings = g.rings.map((r0,ri)=>{
+        let r=r0.map(c=>c.slice());
+        // drop consecutive duplicates
+        r=r.filter((c,i)=>i===0||!same(c,r[i-1]));
+        if(r.length && !same(r[0],r[r.length-1])){
+          if(opt.close){ r.push(r[0].slice()); warnings.push({t:`${ri?'Hole':'Outer ring'} was open and has been closed.`}); fixedCount++; }
+          else warnings.push({bad:true,t:`${ri?'Hole':'Outer ring'} is not closed. Most systems will reject it.`});
+        }
+        if(r.length<4) warnings.push({bad:true,t:`${ri?'Hole':'Outer ring'} has fewer than 4 points, so it isn\u2019t a valid polygon.`});
+        if(opt.wind!=='keep' && r.length>=4){
+          const ccw = signedArea(r)>0;
+          const wantCcw = (opt.wind==='ccw') !== (ri>0); // holes go the opposite way
+          if(ccw!==wantCcw){ r.reverse(); }
+        }
+        if(r.length>=4){
+          const si = selfIntersects(r);
+          if(si===true) warnings.push({bad:true,t:`${ri?'A hole':'The outer ring'} crosses itself. Fix the shape in the map tool before using it as a delivery zone.`});
+        }
+        if(r.some(c=>Math.abs(c[1])>90||Math.abs(c[0])>180)) warnings.push({bad:true,t:'Coordinates fall outside valid longitude/latitude ranges.'});
+        return r;
+      });
+      return {type:'Polygon',rings};
+    });
+    if(warnings.some(w=>w.bad)) problemCount++;
+    let wkt;
+    if(geoms.length===1) wkt=geomWkt(geoms[0]);
+    else if(geoms.every(g=>g.type==='Polygon')) wkt=`MULTIPOLYGON${zTag}${G}(${geoms.map(polyBody).join(S)})`;
+    else wkt=`GEOMETRYCOLLECTION${zTag}${G}(${geoms.map(geomWkt).join(S)})`;
+    const counts = geoms.reduce((n,g)=>n+(g.type==='Point'?1:g.type==='LineString'?g.coords.length:g.rings.reduce((a,r)=>a+r.length,0)),0);
+    const label = geoms.length===1?geoms[0].type:(geoms.every(g=>g.type==='Polygon')?'MultiPolygon':'Collection');
+    return {name:it.name, geoms, wkt, warnings, counts, label};
+  });
+
+  let combined='';
+  if(opt.mode==='multi'){
+    const polys = out.flatMap(o=>o.geoms.filter(g=>g.type==='Polygon'));
+    combined = polys.length ? `MULTIPOLYGON${zTag}${G}(${polys.map(polyBody).join(S)})` : '';
+  } else if(opt.mode==='collection'){
+    combined = `GEOMETRYCOLLECTION${zTag}${G}(${out.flatMap(o=>o.geoms).map(geomWkt).join(S)})`;
+  }
+  return {out, combined, fixedCount, problemCount};
+}
+
+/* ---------- rendering ---------- */
+function render(res, opt){
+  current = res.out;
+  // summary
+  const polyN = res.out.reduce((n,o)=>n+o.geoms.filter(g=>g.type==='Polygon').length,0);
+  const chips = [`<span class="chip">${res.out.length} placemark${res.out.length===1?'':'s'}</span>`,
+                 `<span class="chip">${polyN} polygon${polyN===1?'':'s'}</span>`];
+  if(res.problemCount) chips.push(`<span class="chip err">${res.problemCount} need${res.problemCount===1?'s':''} attention</span>`);
+  else chips.push(`<span class="chip ok">All shapes valid</span>`);
+  if(res.fixedCount) chips.push(`<span class="chip warn">${res.fixedCount} ring${res.fixedCount===1?'':'s'} auto-closed</span>`);
+  summaryEl.innerHTML = chips.join('');
+
+  resultsEl.innerHTML='';
+  if(opt.mode!=='each'){
+    if(!res.combined){ resultsEl.innerHTML='<div class="error">There are no polygons to combine. Switch output to one WKT per placemark.</div>'; allWkt=''; }
+    else{
+      allWkt = res.combined;
+      resultsEl.appendChild(card({name:opt.mode==='multi'?'Combined MULTIPOLYGON':'Combined GEOMETRYCOLLECTION', label:'', counts:null, wkt:res.combined, warnings:res.out.flatMap(o=>o.warnings.map(w=>({bad:w.bad,t:o.name+': '+w.t})))}, -1));
+    }
+  } else {
+    allWkt = res.out.map(o=>o.wkt).join('\n');
+    res.out.forEach((o,i)=>resultsEl.appendChild(card(o,i)));
+  }
+  copyAllBtn.disabled = !allWkt;
+  copyAllBtn.textContent = opt.mode==='each' && res.out.length>1 ? 'Copy all WKT' : 'Copy WKT';
+  drawPreview(res.out);
+}
+
+function esc(s){return s.replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function card(o,i){
+  const el=document.createElement('article'); el.className='card'; if(i>=0) el.dataset.idx=i;
+  const meta = o.counts!=null ? `<div class="meta">${o.label}, ${o.counts.toLocaleString()} point${o.counts===1?'':'s'}, ${o.wkt.length.toLocaleString()} characters</div>` : `<div class="meta">${o.wkt.length.toLocaleString()} characters</div>`;
+  el.innerHTML = `<div class="card-head"><div><h3>${esc(o.name)}</h3>${meta}</div><button class="btn btn-outline btn-sm" type="button">Copy</button></div>
+    <textarea readonly rows="3" aria-label="WKT for ${esc(o.name)}">${esc(o.wkt)}</textarea>
+    ${o.warnings.length?'<ul class="warns">'+o.warnings.map(w=>`<li class="${w.bad?'bad':''}">${esc(w.t)}</li>`).join('')+'</ul>':''}`;
+  el.querySelector('button').addEventListener('click',()=>copy(o.wkt,'WKT copied'));
+  if(i>=0){ el.addEventListener('mouseenter',()=>highlight(i)); el.addEventListener('mouseleave',()=>highlight(-1)); }
+  return el;
+}
+
+function drawPreview(items){
+  const all=[]; items.forEach(o=>o.geoms.forEach(g=>{ if(g.type==='Point') all.push(g.coords); else if(g.type==='LineString') all.push(...g.coords); else g.rings.forEach(r=>all.push(...r)); }));
+  if(!all.length){ previewEl.innerHTML='<div class="empty">Nothing to draw.</div>'; return; }
+  let minX=Infinity,minY=Infinity,maxX=-Infinity,maxY=-Infinity;
+  all.forEach(c=>{minX=Math.min(minX,c[0]);maxX=Math.max(maxX,c[0]);minY=Math.min(minY,c[1]);maxY=Math.max(maxY,c[1]);});
+  const k = Math.cos(((minY+maxY)/2)*Math.PI/180) || 1;   // longitude scaling
+  const W=1000,H=562,pad=36;
+  const spanX=Math.max((maxX-minX)*k,1e-9), spanY=Math.max(maxY-minY,1e-9);
+  const s=Math.min((W-2*pad)/spanX,(H-2*pad)/spanY);
+  const ox=(W-spanX*s)/2, oy=(H-spanY*s)/2;
+  const P=c=>[(ox+(c[0]-minX)*k*s).toFixed(1),(H-oy-(c[1]-minY)*s).toFixed(1)];
+  let svg=`<svg viewBox="0 0 ${W} ${H}" role="img" aria-label="Preview of ${items.length} placemark shapes">`;
+  items.forEach((o,i)=>{
+    o.geoms.forEach(g=>{
+      if(g.type==='Polygon'){
+        const d=g.rings.map(r=>'M'+r.map(c=>P(c).join(',')).join('L')+'Z').join('');
+        svg+=`<path class="shape" data-idx="${i}" d="${d}"><title>${esc(o.name)}</title></path>`;
+      } else if(g.type==='LineString'){
+        svg+=`<polyline class="shape line" data-idx="${i}" points="${g.coords.map(c=>P(c).join(',')).join(' ')}"><title>${esc(o.name)}</title></polyline>`;
+      } else {
+        const [x,y]=P(g.coords);
+        svg+=`<circle class="shape pt" data-idx="${i}" cx="${x}" cy="${y}" r="7"><title>${esc(o.name)}</title></circle>`;
+      }
+    });
+  });
+  svg+='</svg>';
+  previewEl.innerHTML=svg;
+  previewEl.querySelectorAll('.shape').forEach(sh=>{
+    const i=+sh.dataset.idx;
+    sh.addEventListener('mouseenter',()=>highlight(i));
+    sh.addEventListener('mouseleave',()=>highlight(-1));
+    sh.addEventListener('click',()=>{const c=resultsEl.querySelector(`.card[data-idx="${i}"]`); if(c) c.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'nearest'});});
+  });
+}
+function highlight(i){
+  previewEl.querySelectorAll('.shape').forEach(s=>s.classList.toggle('active',+s.dataset.idx===i));
+  resultsEl.querySelectorAll('.card').forEach(c=>c.classList.toggle('active',+c.dataset.idx===i));
+}
+
+/* ---------- run ---------- */
+function opts(){
+  let prec=parseInt($('prec').value,10); if(!isFinite(prec)) prec=6; prec=Math.min(15,Math.max(0,prec));
+  return {style:$('style').value, mode:$('mode').value, order:$('order').value, prec, wind:$('wind').value, close:$('close').checked, keepZ:$('keepZ').checked};
+}
+function showErr(m){ errEl.textContent=m; errEl.classList.remove('hidden'); }
+function reset(){
+  resultsEl.innerHTML=''; summaryEl.innerHTML=''; allWkt=''; copyAllBtn.disabled=true;
+  previewEl.innerHTML='<div class="empty">Your shapes will appear here once a KML is loaded.</div>';
+}
+function run(){
+  errEl.classList.add('hidden');
+  const t=kmlEl.value.trim();
+  if(!t){ reset(); return; }
+  try{ const o=opts(); render(build(parseKml(t),o),o); }
+  catch(e){ reset(); showErr(e.message); }
+}
+let timer; kmlEl.addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(run,250);});
+['style','mode','order','prec','wind','close','keepZ'].forEach(id=>$(id).addEventListener('change',run));
+$('prec').addEventListener('input',()=>{clearTimeout(timer);timer=setTimeout(run,250);});
+
+/* ---------- copy ---------- */
+let toastT;
+function toast(m){const t=$('toast');t.textContent=m;t.classList.add('show');clearTimeout(toastT);toastT=setTimeout(()=>t.classList.remove('show'),1600);}
+async function copy(text,msg){
+  try{ await navigator.clipboard.writeText(text); toast(msg); }
+  catch(_){
+    const ta=document.createElement('textarea'); ta.value=text; ta.style.position='fixed'; ta.style.opacity='0'; document.body.appendChild(ta); ta.select();
+    try{ document.execCommand('copy'); toast(msg); }catch(e){ toast('Copy blocked. Select the text and copy it manually.'); }
+    ta.remove();
+  }
+}
+copyAllBtn.addEventListener('click',()=>copy(allWkt, current.length>1&&opts().mode==='each'?'All WKT copied, one per line':'WKT copied'));
+
+/* ---------- sample & clear ---------- */
+const SAMPLE=`<?xml version="1.0" encoding="UTF-8"?>
+<kml xmlns="http://www.opengis.net/kml/2.2">
+<Document>
+  <name>Sample delivery zones</name>
+  <Placemark>
+    <name>Zone A (0 to 3 km)</name>
+    <Polygon><outerBoundaryIs><LinearRing><coordinates>
+      30.8480,-29.8450,0 30.8890,-29.8420,0 30.9040,-29.8610,0 30.8960,-29.8850,0 30.8620,-29.8890,0 30.8420,-29.8700,0 30.8480,-29.8450,0
+    </coordinates></LinearRing></outerBoundaryIs>
+    <innerBoundaryIs><LinearRing><coordinates>
+      30.8700,-29.8600,0 30.8780,-29.8600,0 30.8780,-29.8660,0 30.8700,-29.8660,0 30.8700,-29.8600,0
+    </coordinates></LinearRing></innerBoundaryIs></Polygon>
+  </Placemark>
+  <Placemark>
+    <name>Zone B (3 to 6 km)</name>
+    <Polygon><outerBoundaryIs><LinearRing><coordinates>
+      30.9040,-29.8610,0 30.9350,-29.8550,0 30.9420,-29.8820,0 30.9180,-29.9020,0 30.8960,-29.8850,0
+    </coordinates></LinearRing></outerBoundaryIs></Polygon>
+  </Placemark>
+  <Placemark>
+    <name>Store</name>
+    <Point><coordinates>30.8735,-29.8635,0</coordinates></Point>
+  </Placemark>
+</Document>
+</kml>`;
+$('sampleBtn').addEventListener('click',()=>{kmlEl.value=SAMPLE; run();});
+$('clearBtn').addEventListener('click',()=>{kmlEl.value=''; errEl.classList.add('hidden'); reset(); kmlEl.focus();});
+})();
+</script>
+</body>
+</html>
